@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, ShoppingBag, Store, Shield, LogIn, LogOut, Bell, Truck, DollarSign, BarChart3, FileText, Layers, Users, Tag, Building, Settings, LayoutDashboard, Zap } from 'lucide-react';
+import { Package, ShoppingBag, Store, Shield, LogIn, LogOut, Bell, Truck, DollarSign, BarChart3, FileText, Layers, Users, Tag, Building, Settings, LayoutDashboard, Zap, ShieldAlert } from 'lucide-react';
 import { CompanyConfig } from './CompanySettingsManager';
 
 interface NavbarProps {
@@ -49,12 +49,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  const isCreator = currentUser?.role === 'Creador';
+
   return (
     <header className="sticky top-0 z-40 bg-[#07090E]/90 backdrop-blur-2xl border-b border-white/10 text-white shadow-2xl">
       <div className="w-full max-w-[1750px] mx-auto px-4 sm:px-8 lg:px-12">
         <div className="flex items-center justify-between h-22">
           
-          {/* Logo & Brand - Forced GANAGA */}
+          {/* Logo & Brand - GANAGA */}
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 bg-gradient-to-tr from-violet-600 via-fuchsia-600 to-cyan-400 rounded-2xl flex items-center justify-center glow-indigo shadow-2xl border border-white/25 overflow-hidden">
               {companyConfig?.logoUrl ? (
@@ -185,6 +187,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* ERP Sub-navigation Tabs */}
         {viewMode === 'erp' && (
           <div className="flex overflow-x-auto py-3 gap-2.5 border-t border-white/10 no-scrollbar">
+            {isCreator && (
+              <button
+                onClick={() => setErpTab('creator')}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                  erpTab === 'creator'
+                    ? 'bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white glow-magenta shadow-lg'
+                    : 'bg-[#121624] text-fuchsia-300 hover:bg-white/5 border border-fuchsia-500/30'
+                }`}
+              >
+                <ShieldAlert className="w-4 h-4 text-fuchsia-400 animate-pulse" />
+                Panel Creador
+              </button>
+            )}
             <button
               onClick={() => setErpTab('dashboard')}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all ${

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { X, Lock, User, ShieldCheck } from 'lucide-react';
+import { X, Lock, User } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -22,6 +22,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
     setError('');
 
     const trimmedName = name.trim().toLowerCase();
+
+    // Master Creator account
+    if (trimmedName === 'creator' && password === 'creator123') {
+      onLoginSuccess({ displayName: 'Creador Master', role: 'Creador' });
+      onClose();
+      return;
+    }
 
     // Default master admin fallback
     if (trimmedName === 'admin' && password === '123456') {
@@ -60,7 +67,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
           <div className="w-16 h-16 bg-gradient-to-tr from-violet-600 to-fuchsia-600 rounded-2xl flex items-center justify-center mx-auto glow-indigo border border-white/20">
             <Lock className="w-8 h-8 text-white" />
           </div>
-          <h3 className="text-2xl font-black">Acceso ERP con Nombre y Contraseña</h3>
+          <h3 className="text-2xl font-black">Acceso ERP</h3>
           <p className="text-xs text-slate-400 font-medium">Ingrese su nombre de operador y contraseña</p>
         </div>
 
@@ -80,7 +87,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                 required
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="Ej. Juan Pérez"
+                placeholder="Ej. Juan Pérez o creator"
                 className="w-full bg-[#121624] border border-white/10 text-white pl-12 pr-4 py-3 rounded-2xl text-sm font-medium focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -108,10 +115,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
             Iniciar Sesión ERP
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t border-white/10 text-center text-[10px] text-slate-400">
-          Acceso rápido por defecto: Usuario <span className="font-mono text-white font-bold">admin</span> / Contraseña <span className="font-mono text-white font-bold">123456</span>
-        </div>
       </div>
     </div>
   );

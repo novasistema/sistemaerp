@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, CartItem, Order } from './types';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { db } from './firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { seedDatabaseIfEmpty, initialProducts, initialOrders } from './seedData';
 
@@ -20,11 +20,12 @@ import { InvoicingManager } from './components/InvoicingManager';
 import { MercadoPagoManager } from './components/MercadoPagoManager';
 import { ReportsManager } from './components/ReportsManager';
 import { CompanySettingsManager } from './components/CompanySettingsManager';
-import { Lock, LogIn } from 'lucide-react';
+import { CreatorPanel, SubscriptionConfig } from './components/CreatorPanel';
+import { Lock, LogIn, ShieldAlert } from 'lucide-react';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'ecommerce' | 'erp'>('ecommerce');
-  const [erpTab, setErpTab] = useState<'dashboard' | 'invoicing' | 'inventory' | 'suppliers' | 'clients' | 'pricelists' | 'warehouse' | 'mercadopago' | 'reports' | 'settings'>('dashboard');
+  const [erpTab, setErpTab] = useState<'creator' | 'dashboard' | 'invoicing' | 'inventory' | 'suppliers' | 'clients' | 'pricelists' | 'warehouse' | 'mercadopago' | 'reports' | 'settings'>('dashboard');
 
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
@@ -36,15 +37,43 @@ export default function App() {
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ displayName: string; role: string } | null>(null);
 
+  const [subscription, setSubscription] = useState<SubscriptionConfig>({
+    isActive: true,
+    suspendedMessage: '⚠️ Suscripción vencida o suspendida por falta de pago. Por favor contacte al administrador.',
+    enabledModules: {
+      invoicing: true,
+      inventory: true,
+      suppliers: true,
+      clients: true,
+      pricelists: true,
+      warehouse: true,
+      mercadopago: true,
+      reports: true,
+    },
+  });
+
   useEffect(() => {
     const initApp = async () => {
       try {
         await seedDatabaseIfEmpty();
       } catch (e) {
-        console.warn("Using local fallback data due to offline/network mode.");
+        console.warn("Using local fallback data.");
       }
     };
     initApp();
+
+    const loadSub = () => {
+      try {
+        const local = localStorage.getItem('ganaga_subscription_config');
+        if (local) {
+          setSubscription(JSON.parse(local));
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    loadSub();
+    const interval = setInterval(loadSub, 1500);
 
     const unsubscribeProducts = onSnapshot(
       collection(db, 'products'),
@@ -71,6 +100,7 @@ export default function App() {
     return () => {
       unsubscribeProducts();
       unsubscribeOrders();
+      clearInterval(interval);
     };
   }, []);
 
@@ -103,6 +133,40 @@ export default function App() {
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
   const cartCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
+  const isCreator = currentUser?.role === 'Creador';
+
+  if (!subscription.isActive && !isCreator) {
+    return (
+      <div className="min-h-screen bg-[#07090E] text-white flex flex-col items-center justify-center p-6 selection:bg-fuchsia-500">
+        <div className="glass-card max-w-lg w-full p-10 rounded-[3rem] text-center space-y-6 border border-rose-500/40 glow-magenta shadow-2xl">
+          <div className="w-20 h-20 bg-rose-600/20 border border-rose-500/40 rounded-3xl flex items-center justify-center mx-auto text-rose-400 animate-pulse">
+            <ShieldAlert className="w-10 h-10" />
+          </div>
+          <div className="space-y-3">
+            <h1 className="text-2xl font-black text-white">Aplicación Suspendida</h1>
+            <p className="text-sm text-slate-300 font-medium leading-relaxed">{subscription.suspendedMessage}</p>
+          </div>
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-black uppercase tracking-wider glow-indigo shadow-xl transition flex items-center justify-center gap-2"
+          >
+            <LogIn className="w-4 h-4" /> Iniciar Sesión como Creador
+          </button>
+        </div>
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          currentUser={currentUser}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            setViewMode('erp');
+            if (user.role === 'Creador') setErpTab('creator');
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#07090E] text-slate-100 flex flex-col font-sans selection:bg-fuchsia-500 selection:text-white">
       <Navbar
@@ -115,7 +179,13 @@ export default function App() {
           setViewMode(mode);
         }}
         erpTab={erpTab}
-        setErpTab={setErpTab}
+        setErpTab={(tab) => {
+          if (tab === 'creator' && !isCreator) {
+            setIsAuthModalOpen(true);
+            return;
+          }
+          setErpTab(tab);
+        }}
         cartCount={cartCount}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
@@ -136,7 +206,7 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-black text-white">Sistema Protegido</h2>
-              <p className="text-slate-400 text-xs font-medium">Debe iniciar sesión con su nombre de usuario y contraseña para acceder al Sistema ERP de Gestión.</p>
+              <p className="text-slate-400 text-xs font-medium">Debe iniciar sesión como operador o Creador para acceder al Sistema ERP.</p>
             </div>
             <button
               onClick={() => setIsAuthModalOpen(true)}
@@ -147,15 +217,16 @@ export default function App() {
           </div>
         ) : (
           <div>
-            {erpTab === 'dashboard' && <Dashboard products={products} orders={orders} />}
-            {erpTab === 'invoicing' && <InvoicingManager orders={orders} />}
-            {erpTab === 'inventory' && <InventoryManager products={products} onRefresh={() => {}} />}
-            {erpTab === 'suppliers' && <SupplierManager />}
-            {erpTab === 'clients' && <ClientsManager />}
-            {erpTab === 'pricelists' && <PriceListManager products={products} />}
-            {erpTab === 'warehouse' && <WarehouseManager orders={orders} onRefresh={() => {}} />}
-            {erpTab === 'mercadopago' && <MercadoPagoManager />}
-            {erpTab === 'reports' && <ReportsManager products={products} orders={orders} />}
+            {erpTab === 'creator' && isCreator && <CreatorPanel />}
+            {erpTab === 'dashboard' && subscription.enabledModules.reports && <Dashboard products={products} orders={orders} />}
+            {erpTab === 'invoicing' && subscription.enabledModules.invoicing && <InvoicingManager orders={orders} />}
+            {erpTab === 'inventory' && subscription.enabledModules.inventory && <InventoryManager products={products} onRefresh={() => {}} />}
+            {erpTab === 'suppliers' && subscription.enabledModules.suppliers && <SupplierManager />}
+            {erpTab === 'clients' && subscription.enabledModules.clients && <ClientsManager />}
+            {erpTab === 'pricelists' && subscription.enabledModules.pricelists && <PriceListManager products={products} />}
+            {erpTab === 'warehouse' && subscription.enabledModules.warehouse && <WarehouseManager orders={orders} onRefresh={() => {}} />}
+            {erpTab === 'mercadopago' && subscription.enabledModules.mercadopago && <MercadoPagoManager />}
+            {erpTab === 'reports' && subscription.enabledModules.reports && <ReportsManager products={products} orders={orders} />}
             {erpTab === 'settings' && <CompanySettingsManager />}
           </div>
         )}
@@ -176,7 +247,7 @@ export default function App() {
         cart={cart}
         onOrderSuccess={(newOrder) => {
           setCart([]);
-          setOrders(prev => [newOrder, ...prev]);
+          orders.unshift(newOrder);
         }}
       />
 
@@ -184,7 +255,15 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         currentUser={currentUser}
-        onLoginSuccess={(user) => setCurrentUser(user)}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          setViewMode('erp');
+          if (user.role === 'Creador') {
+            setErpTab('creator');
+          } else {
+            setErpTab('dashboard');
+          }
+        }}
       />
 
       <NotificationModal
