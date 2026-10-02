@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Products Rules
+    match /products/{productId} {
+      allow read, create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    // Customers Rules
+    match /customers/{customerId} {
+      allow read, create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    // Orders Rules
+    match /orders/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    // Invoices Rules
+    match /invoices/{invoiceId} {
+      allow read, create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    // Mercado Pago Transactions Rules
+    match /mercado_pago_transactions/{txId} {
+      allow read, create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    // Suppliers Rules
+    match /suppliers/{supplierId} {
+      allow read, create, update: if true;
+      allow delete: if isSignedIn();
+    }
+  }
+}
