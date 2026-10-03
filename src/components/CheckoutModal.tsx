@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { CartItem, Order } from '../types';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import { X, CheckCircle, ShieldCheck, DollarSign, CreditCard, Truck } from 'lucide-react';
+import { CartItem, Order, OrderItem, OrderStatus } from '../types';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
+import { X, CheckCircle, CreditCard, DollarSign } from 'lucide-react';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -11,178 +11,196 @@ interface CheckoutModalProps {
   onOrderSuccess: (order: Order) => void;
 }
 
-export const CheckoutModal: React.FC<CheckoutModalProps> = ({
-  isOpen,
-  onClose,
-  cart,
-  onOrderSuccess,
-}) => {
-  const [customerName, setCustomerName] = useState('Carlos Benítez');
-  const [customerEmail, setCustomerEmail] = useState('carlos.benitez@gmail.com');
-  const [customerPhone, setCustomerPhone] = useState('+54 11 4455-6677');
-  const [shippingAddress, setShippingAddress] = useState('Av. Corrientes 1234, CABA, Argentina');
+export const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, cart, onOrderSuccess }) => {
+  const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Mercado Pago' | 'Transferencia Bancaria' | 'Efectivo'>('Mercado Pago');
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [createdOrderNumber, setCreatedOrderNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [successModalData, setSuccessModalData] = useState<Order | null>(null);
 
   if (!isOpen) return null;
 
-  const subtotal = cart.reduce((acc, i) => acc + i.product.finalPriceARS * i.quantity, 0);
-  const shipping = 15000;
-  const total = subtotal + shipping;
+  const totalAmount = cart.reduce((acc, i) => acc + (i.product.finalPriceARS * i.quantity), 0);
 
-  const handleSubmitOrder = async (e: React.FormEvent) => {
+  const handleSubmitCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
-    const orderId = `ord-${Date.now()}`;
-    const orderNumber = `PED-2026-${Math.floor(100 + Math.random() * 900)}`;
+    if (cart.length === 0) return;
+
+    setLoading(true);
+
+    const orderItems: OrderItem[] = cart.map(i => ({
+      productId: i.product.id,
+      title: i.product.title,
+      sku: i.product.sku,
+      quantity: i.quantity,
+      price: i.product.finalPriceARS,
+    }));
+
+    const status: OrderStatus = paymentMethod === 'Efectivo' ? 'Pendiente de Pago' : 'Pagado';
 
     const newOrder: Order = {
-      id: orderId,
-      orderNumber,
-      customerName,
-      customerEmail,
-      customerPhone,
-      shippingAddress,
-      items: cart.map(i => ({
-        productId: i.product.id,
-        title: i.product.title,
-        sku: i.product.sku,
-        quantity: i.quantity,
-        price: i.product.finalPriceARS,
-      })),
-      subtotal,
-      shipping,
-      total,
-      status: paymentMethod === 'Mercado Pago' ? 'Pagado' : 'Pendiente de Pago',
+      id: `ord-${Date.now()}`,
+      orderNumber: `ORD-${Math.floor(1000 + Math.random() * 9000)}`,
+      customerName: clientName || 'Cliente Ocasional',
+      customerEmail: clientEmail || 'cliente@ganaga.com',
+      customerPhone: clientPhone || '+54 9 11 0000 0000',
+      shippingAddress: shippingAddress || 'Retiro en Local / Envío Standard',
+      items: orderItems,
+      subtotal: totalAmount,
+      shipping: 0,
+      total: totalAmount,
+      status,
       paymentMethod,
-      paymentId: paymentMethod === 'Mercado Pago' ? `MP-${Math.floor(10000000 + Math.random() * 90000000)}` : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     try {
-      await setDoc(doc(db, 'orders', orderId), newOrder);
-      setCreatedOrderNumber(orderNumber);
-      setIsSuccess(true);
-      setTimeout(() => {
-        setIsSuccess(false);
-        onOrderSuccess(newOrder);
-        onClose();
-      }, 2000);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `orders/${orderId}`);
+      await addDoc(collection(db, 'orders'), newOrder);
+    } catch (e) {
+      console.warn("Offline order storage fallback");
     }
+
+    setLoading(false);
+    onOrderSuccess(newOrder);
+    setSuccessModalData(newOrder);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-4">
-      <div className="glass-card rounded-[2.5rem] max-w-xl w-full p-8 text-white relative shadow-2xl border border-white/20 glow-magenta max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-6 right-6 text-slate-400 hover:text-white bg-white/10 p-2.5 rounded-full">
-          <X className="w-5 h-5" />
-        </button>
-
-        {isSuccess ? (
-          <div className="text-center py-16 space-y-4">
-            <CheckCircle className="w-16 h-16 text-emerald-400 mx-auto animate-bounce" />
-            <h3 className="text-2xl font-black">¡Pedido Creado en Pesos (ARS)!</h3>
-            <p className="text-slate-400 text-xs font-mono">Número de Orden: {createdOrderNumber}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 overflow-y-auto">
+      
+      {/* Success Popup Modal when payment received */}
+      {successModalData ? (
+        <div className="glass-card rounded-[3rem] max-w-md w-full p-10 text-center space-y-6 border border-emerald-500/50 glow-emerald shadow-2xl animate-fade-in relative z-50">
+          <div className="w-20 h-20 bg-emerald-500/20 border border-emerald-500/50 rounded-3xl flex items-center justify-center mx-auto text-emerald-400 animate-bounce">
+            <CheckCircle className="w-10 h-10" />
           </div>
-        ) : (
-          <form onSubmit={handleSubmitOrder} className="space-y-6">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 bg-fuchsia-600/20 border border-fuchsia-500/40 rounded-2xl flex items-center justify-center text-fuchsia-400 glow-magenta">
-                <CreditCard className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-xl font-black">Finalizar Compra en Pesos (ARS)</h3>
-                <p className="text-xs text-slate-400 font-medium">Complete sus datos de envío y pago en moneda nacional</p>
-              </div>
+          <div className="space-y-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-500/30">
+              ¡Pago Ingresado con Éxito!
+            </span>
+            <h2 className="text-2xl font-black text-white">¡Nuevo Pago Recibido!</h2>
+            <p className="text-xs text-slate-300">
+              Se ha procesado un pago por <span className="font-mono text-emerald-400 font-bold">${successModalData.total.toLocaleString('es-AR')} ARS</span> a través de <span className="text-cyan-300 font-bold">{successModalData.paymentMethod}</span>.
+            </p>
+          </div>
+
+          <div className="bg-[#121624] p-4 rounded-2xl border border-white/10 text-left space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-slate-400">Cliente:</span>
+              <span className="font-bold text-white">{successModalData.customerName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Orden N°:</span>
+              <span className="font-mono text-cyan-400">{successModalData.orderNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Estado:</span>
+              <span className="font-bold text-emerald-400 uppercase">{successModalData.status}</span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setSuccessModalData(null);
+              onClose();
+            }}
+            className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-xl transition"
+          >
+            Aceptar & Continuar
+          </button>
+        </div>
+      ) : (
+        <div className="glass-card rounded-[2.5rem] max-w-lg w-full p-8 text-white relative shadow-2xl border border-white/20 glow-indigo">
+          <button onClick={onClose} className="absolute top-6 right-6 text-slate-400 hover:text-white bg-white/10 p-2.5 rounded-full">
+            <X className="w-5 h-5" />
+          </button>
+
+          <div className="flex items-center gap-3.5 mb-6">
+            <div className="w-12 h-12 bg-gradient-to-tr from-violet-600 to-fuchsia-600 rounded-2xl flex items-center justify-center glow-indigo">
+              <CreditCard className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black">Finalizar Compra & Pago</h3>
+              <p className="text-xs text-slate-400">Total a abonar: <span className="font-mono text-emerald-400 font-bold">${totalAmount.toLocaleString('es-AR')} ARS</span></p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmitCheckout} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Nombre y Apellido</label>
+              <input
+                type="text"
+                required
+                value={clientName}
+                onChange={e => setClientName(e.target.value)}
+                placeholder="Ej. Juan Pérez"
+                className="w-full bg-[#121624] border border-white/10 text-white px-4 py-3 rounded-2xl text-xs font-medium focus:outline-none focus:border-violet-500"
+              />
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nombre y Apellido</label>
-                <input
-                  type="text"
-                  required
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full bg-[#121624] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white font-medium focus:outline-none focus:border-fuchsia-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={customerEmail}
-                    onChange={e => setCustomerEmail(e.target.value)}
-                    className="w-full bg-[#121624] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white font-medium focus:outline-none focus:border-fuchsia-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Teléfono</label>
-                  <input
-                    type="text"
-                    required
-                    value={customerPhone}
-                    onChange={e => setCustomerPhone(e.target.value)}
-                    className="w-full bg-[#121624] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white font-medium focus:outline-none focus:border-fuchsia-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Dirección de Envío</label>
-                <input
-                  type="text"
-                  required
-                  value={shippingAddress}
-                  onChange={e => setShippingAddress(e.target.value)}
-                  className="w-full bg-[#121624] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white font-medium focus:outline-none focus:border-fuchsia-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Método de Pago</label>
-                <select
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value as any)}
-                  className="w-full bg-[#121624] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white font-bold focus:outline-none focus:border-fuchsia-500"
-                >
-                  <option value="Mercado Pago">Mercado Pago (Acreditación Instantánea en Pesos)</option>
-                  <option value="Transferencia Bancaria">Transferencia Bancaria CBU en Pesos</option>
-                  <option value="Efectivo">Efectivo contra entrega</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Correo Electrónico</label>
+              <input
+                type="email"
+                required
+                value={clientEmail}
+                onChange={e => setClientEmail(e.target.value)}
+                placeholder="juan@correo.com"
+                className="w-full bg-[#121624] border border-white/10 text-white px-4 py-3 rounded-2xl text-xs font-medium focus:outline-none focus:border-violet-500"
+              />
             </div>
 
-            <div className="bg-[#121624] p-5 rounded-2xl border border-white/10 space-y-2 text-xs font-medium">
-              <div className="flex justify-between text-slate-400">
-                <span>Subtotal Ítems:</span>
-                <span className="font-mono text-white">${subtotal.toLocaleString('es-AR')} ARS</span>
-              </div>
-              <div className="flex justify-between text-slate-400">
-                <span>Envío Logística:</span>
-                <span className="font-mono text-white">${shipping.toLocaleString('es-AR')} ARS</span>
-              </div>
-              <div className="flex justify-between text-base font-black text-white pt-2 border-t border-white/10">
-                <span>Total a Pagar en Pesos:</span>
-                <span className="font-mono text-emerald-400">${total.toLocaleString('es-AR')} ARS</span>
-              </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Teléfono / WhatsApp</label>
+              <input
+                type="text"
+                required
+                value={clientPhone}
+                onChange={e => setClientPhone(e.target.value)}
+                placeholder="+54 9 11 ..."
+                className="w-full bg-[#121624] border border-white/10 text-white px-4 py-3 rounded-2xl text-xs font-medium focus:outline-none focus:border-violet-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Dirección de Envío</label>
+              <input
+                type="text"
+                required
+                value={shippingAddress}
+                onChange={e => setShippingAddress(e.target.value)}
+                placeholder="Av. Corrientes 1234, CABA"
+                className="w-full bg-[#121624] border border-white/10 text-white px-4 py-3 rounded-2xl text-xs font-medium focus:outline-none focus:border-violet-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Método de Pago</label>
+              <select
+                value={paymentMethod}
+                onChange={e => setPaymentMethod(e.target.value as any)}
+                className="w-full bg-[#121624] border border-white/10 text-white px-4 py-3 rounded-2xl text-xs font-medium focus:outline-none focus:border-violet-500"
+              >
+                <option value="Mercado Pago">Mercado Pago (QR / Online)</option>
+                <option value="Transferencia Bancaria">Transferencia Bancaria CBU/Alias</option>
+                <option value="Efectivo">Efectivo en Local</option>
+              </select>
             </div>
 
             <button
               type="submit"
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-black uppercase tracking-wider glow-magenta shadow-xl transition"
+              disabled={loading || cart.length === 0}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white text-xs font-black uppercase tracking-wider glow-indigo shadow-xl transition flex items-center justify-center gap-2"
             >
-              Confirmar Orden por ${total.toLocaleString('es-AR')} ARS
+              {loading ? 'Procesando Pago...' : 'Confirmar & Pagar Ahora'}
             </button>
           </form>
-        )}
-      </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, ShoppingBag, Store, Shield, LogIn, LogOut, Bell, Truck, DollarSign, BarChart3, FileText, Layers, Users, Tag, Building, Settings, LayoutDashboard, Zap, ShieldAlert } from 'lucide-react';
+import { Package, ShoppingBag, Store, Shield, LogIn, LogOut, Bell, Truck, DollarSign, BarChart3, FileText, Layers, Users, Tag, Building, Settings, LayoutDashboard, Zap, ShieldAlert, Database } from 'lucide-react';
 import { CompanyConfig } from './CompanySettingsManager';
 
 interface NavbarProps {
@@ -297,6 +297,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <DollarSign className="w-4 h-4 text-sky-400" />
               Mercado Pago & Finanzas
+            </button>
+            <button
+              onClick={() => setErpTab('backup')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all ${
+                erpTab === 'backup'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white glow-cyan shadow-lg'
+                  : 'bg-[#121624] text-slate-300 hover:bg-white/5 border border-white/5'
+              }`}
+            >
+              <Database className="w-4 h-4 text-cyan-400" />
+              Módulo Backup
             </button>
             <button
               onClick={() => setErpTab('reports')}

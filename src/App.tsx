@@ -18,6 +18,7 @@ import { PriceListManager } from './components/PriceListManager';
 import { WarehouseManager } from './components/WarehouseManager';
 import { InvoicingManager } from './components/InvoicingManager';
 import { MercadoPagoManager } from './components/MercadoPagoManager';
+import { BackupManager } from './components/BackupManager';
 import { ReportsManager } from './components/ReportsManager';
 import { CompanySettingsManager } from './components/CompanySettingsManager';
 import { CreatorPanel, SubscriptionConfig } from './components/CreatorPanel';
@@ -25,7 +26,7 @@ import { Lock, LogIn, ShieldAlert } from 'lucide-react';
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'ecommerce' | 'erp'>('ecommerce');
-  const [erpTab, setErpTab] = useState<'creator' | 'dashboard' | 'invoicing' | 'inventory' | 'suppliers' | 'clients' | 'pricelists' | 'warehouse' | 'mercadopago' | 'reports' | 'settings'>('dashboard');
+  const [erpTab, setErpTab] = useState<'creator' | 'dashboard' | 'invoicing' | 'inventory' | 'suppliers' | 'clients' | 'pricelists' | 'warehouse' | 'mercadopago' | 'backup' | 'reports' | 'settings'>('dashboard');
 
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
@@ -226,6 +227,7 @@ export default function App() {
             {erpTab === 'pricelists' && subscription.enabledModules.pricelists && <PriceListManager products={products} />}
             {erpTab === 'warehouse' && subscription.enabledModules.warehouse && <WarehouseManager orders={orders} onRefresh={() => {}} />}
             {erpTab === 'mercadopago' && subscription.enabledModules.mercadopago && <MercadoPagoManager />}
+            {erpTab === 'backup' && <BackupManager />}
             {erpTab === 'reports' && subscription.enabledModules.reports && <ReportsManager products={products} orders={orders} />}
             {erpTab === 'settings' && <CompanySettingsManager />}
           </div>
